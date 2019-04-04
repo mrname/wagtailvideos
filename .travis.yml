@@ -1,3 +1,4 @@
+dist: xenial
 language: python
 cache: pip
 
@@ -8,9 +9,7 @@ env:
   matrix:
     - TOX_ENV=flake8,isort
 
-
 python:
-  - 3.4
   - 3.5
   - 3.6
 
@@ -25,7 +24,6 @@ matrix:
       python: 3.5
 
 before_install:
-    - sudo add-apt-repository ppa:mc3man/trusty-media -y
     - sudo apt-get update -qq
     # The install of ffmpeg fails at random with 'There were unauthenticated packages' 🤷‍♂️
     - sudo apt-get install ffmpeg --allow-unauthenticated -y

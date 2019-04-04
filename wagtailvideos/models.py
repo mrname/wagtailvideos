@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import mimetypes
 import os
@@ -90,6 +91,7 @@ class AbstractVideo(CollectionMember, index.Indexed, models.Model):
     tags = TaggableManager(help_text=None, blank=True, verbose_name=_('tags'))
 
     file_size = models.PositiveIntegerField(null=True, editable=False)
+    file_hash = models.CharField(max_length=40, blank=True, editable=False)
 
     objects = VideoQuerySet.as_manager()
 
@@ -105,6 +107,17 @@ class AbstractVideo(CollectionMember, index.Indexed, models.Model):
         super(AbstractVideo, self).__init__(*args, **kwargs)
         self._initial_file = self.file
 
+    def is_stored_locally(self):
+        """
+        Returns True if the image is hosted on the local filesystem
+        """
+        try:
+            self.file.path
+
+            return True
+        except NotImplementedError:
+            return False
+
     def get_file_size(self):
         if self.file_size is None:
             try:
@@ -116,6 +129,16 @@ class AbstractVideo(CollectionMember, index.Indexed, models.Model):
             self.save(update_fields=['file_size'])
 
         return self.file_size
+
+    def get_file_hash(self):
+        block_size=256*128
+        file_hash = hashlib.sha1()
+        with self.open_file() as f:
+            for chunk in iter(lambda: f.read(block_size), b''):
+                file_hash.update(chunk)
+        self.file_hash = file_hash.hexdigest()
+        self.save(update_fields=['file_hash'])
+        return self.file_hash
 
     def get_upload_to(self, filename):
         folder_name = 'original_videos'
@@ -219,6 +242,36 @@ class AbstractVideo(CollectionMember, index.Indexed, models.Model):
             TranscodingThread(transcode).start()
         else:
             pass  # TODO Queue?
+
+    @contextmanager
+    def open_file(self):
+        # Open file if it is closed
+        close_file = False
+        try:
+            video_file = self.file
+
+            if self.file.closed:
+                # Reopen the file
+                if self.is_stored_locally():
+                    self.file.open('rb')
+                else:
+                    # Some external storage backends don't allow reopening
+                    # the file. Get a fresh file instance. #1397
+                    storage = self._meta.get_field('file').storage
+                    video_file = storage.open(self.file.name, 'rb')
+
+                close_file = True
+        except IOError:
+            raise
+
+        # Seek to beginning
+        video_file.seek(0)
+
+        try:
+            yield video_file
+        finally:
+            if close_file:
+                video_file.close()
 
     class Meta:
         abstract = True
@@ -342,15 +395,18 @@ def video_delete(sender, instance, **kwargs):
 # Fields that need the actual video file to create
 @receiver(post_save, sender=Video)
 def video_saved(sender, instance, **kwargs):
-    if not ffmpeg.installed():
-        return
 
     if hasattr(instance, '_from_signal'):
         return
 
+    create_file_hash = getattr(
+        settings, 'WAGTAILVIDEOS_CREATE_FILE_HASH', False
+    )
+
     has_changed = instance._initial_file is not instance.file
     filled_out = instance.thumbnail is not None and instance.duration is not None
-    if has_changed or not filled_out:
+
+    if (has_changed or not filled_out) and ffmpeg.installed():
         with get_local_file(instance.file) as file_path:
             if has_changed or instance.thumbnail is None:
                 instance.thumbnail = ffmpeg.get_thumbnail(file_path)
@@ -359,6 +415,10 @@ def video_saved(sender, instance, **kwargs):
                 instance.duration = ffmpeg.get_duration(file_path)
 
     instance.file_size = instance.file.size
+
+    if has_changed and create_file_hash and not kwargs['update_fields']:
+        instance.get_file_hash()
+
     instance._from_signal = True
     instance.save()
     del instance._from_signal
