@@ -1,5 +1,6 @@
 from __future__ import unicode_literals
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase, override_settings
 from wagtail.tests.utils import WagtailTestUtils
 
@@ -32,3 +33,21 @@ class TestVideoModel(WagtailTestUtils, TestCase):
         video.save()
         assert not video.file_hash
         assert video.file_size
+
+    def test_thumbnail(self):
+        # Creating a video with no provided thumbnail should auto-create one
+        video_file = create_test_video_file()
+        video = Video(
+            file=video_file
+        )
+        video.save()
+        assert video.thumbnail
+        # Change the thumbnail to a manually provided one
+        video.thumbnail = SimpleUploadedFile('test.jpg', b'')
+        video.save()
+        # Change the video file, and ensure that our manually provided
+        # thumbnail is still there
+        video_file = create_test_video_file()
+        video.file = video_file
+        video.save()
+        assert video.thumbnail.name == 'original_videos/test.jpg'
