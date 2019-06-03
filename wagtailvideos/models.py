@@ -405,10 +405,11 @@ def video_saved(sender, instance, **kwargs):
 
     has_changed = instance._initial_file is not instance.file
     filled_out = instance.thumbnail is not None and instance.duration is not None
+    thumbnail_is_autogen = instance.thumbnail is not None and instance.thumbnail.name and instance.thumbnail.name.endswith('autogen.jpg')
 
     if (has_changed or not filled_out) and ffmpeg.installed():
         with get_local_file(instance.file) as file_path:
-            if has_changed or instance.thumbnail is None:
+            if (has_changed and thumbnail_is_autogen) or not instance.thumbnail:
                 instance.thumbnail = ffmpeg.get_thumbnail(file_path)
 
             if has_changed or instance.duration is None:
