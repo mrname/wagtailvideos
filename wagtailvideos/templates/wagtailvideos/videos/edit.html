@@ -12,6 +12,9 @@ label[for="thumbnail-clear_id"] {
     top: -15px;
     left: 25px;
 }
+.thumbnail_input {
+    margin-left: 5%;
+}
 </style>
 {% endblock %}
 {% block extra_js %} {{ block.super }} {% url 'wagtailadmin_tag_autocomplete' as autocomplete_url %}
@@ -34,6 +37,10 @@ label[for="thumbnail-clear_id"] {
             <ul class="fields">
                 {% for field in form %}
                     {% if field.name == 'file' %} {% include "wagtailvideos/videos/_file_field_as_li.html" %}
+                    {% elif field.name == 'thumbnail' %}
+                        {% with "thumbnail_input" as input_classes %}
+                            {% include "wagtailadmin/shared/field_as_li.html" %}
+                        {% endwith %}
                     {% elif field.is_hidden %} {{ field }}
                     {% else %} {% include "wagtailadmin/shared/field_as_li.html" %} 
                     {% endif %}
