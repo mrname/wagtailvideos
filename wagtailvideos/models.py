@@ -396,6 +396,9 @@ def video_delete(sender, instance, **kwargs):
 @receiver(post_save, sender=Video)
 def video_saved(sender, instance, **kwargs):
 
+    if 'raw' in kwargs and kwargs['raw']:
+        return
+
     if hasattr(instance, '_from_signal'):
         return
 
